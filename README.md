@@ -67,7 +67,7 @@ The /stats and /drink commands are designed to work as personal app commands. A 
 
 ## Run locally
 
-Use Node.js 20 or newer.
+Use Node.js 22 or newer.
 
 1. Clone the repository.
 2. Install dependencies:
