@@ -75,11 +75,7 @@ Use Node.js 20 or newer.
        npm install
 
 3. Copy .env.example to .env and fill in DISCORD_TOKEN and CLIENT_ID.
-4. Register slash commands:
-
-       npm run register
-
-5. Start the bot:
+4. Start the bot (global slash commands are automatically registered at startup):
 
        npm start
 
