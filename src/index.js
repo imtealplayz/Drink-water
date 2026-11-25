@@ -4,7 +4,9 @@ const {
   Client,
   GatewayIntentBits,
   MessageFlags,
-  Partials
+  Partials,
+  REST,
+  Routes
 } = require("discord.js");
 
 const {
@@ -47,8 +49,10 @@ const clientId = process.env.CLIENT_ID;
 const prefix = process.env.PREFIX || "w!";
 
 if (!token || !clientId) {
-  console.error("Missing DISCORD_TOKEN or CLIENT_ID. Copy .env.example to .env and fill it in.");
-  process.exit(1);
+  console.error("Missing DISCORD_TOKEN or CLIENT_ID. Add both in Railway Variables; the service is waiting for configuration.");
+  setInterval(() => {
+    console.log("Drink Water is waiting for DISCORD_TOKEN and CLIENT_ID.");
+  }, 5 * 60 * 1000);
 }
 
 const client = new Client({
@@ -480,9 +484,17 @@ async function runScheduler() {
   }
 }
 
-client.once("ready", () => {
+client.once("ready", async () => {
   console.log("Drink Water is online as " + client.user.tag + ".");
-  console.log("Loaded " + commandDefinitions.length + " application command definitions.");
+
+  try {
+    const rest = new REST({ version: "10" }).setToken(token);
+    await rest.put(Routes.applicationCommands(clientId), { body: commandDefinitions });
+    console.log("Registered " + commandDefinitions.length + " global application commands.");
+  } catch (error) {
+    console.error("Could not register application commands:", error);
+  }
+
   runScheduler().catch((error) => console.error("Initial scheduler run failed:", error));
   setInterval(() => {
     runScheduler().catch((error) => console.error("Scheduler error:", error));
@@ -548,7 +560,9 @@ client.on("error", (error) => {
   console.error("Discord client error:", error);
 });
 
-client.login(token).catch((error) => {
-  console.error("Could not log in to Discord:", error);
-  process.exit(1);
-});
+if (token && clientId) {
+  client.login(token).catch((error) => {
+    console.error("Could not log in to Discord:", error);
+    process.exit(1);
+  });
+}
