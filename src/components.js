@@ -173,7 +173,7 @@ function settingsModal(user) {
   const interval=user.interval_minutes===null?"auto":String(user.interval_minutes);
   const quiet=formatClockMinute(user.quiet_start_minute)+"-"+formatClockMinute(user.quiet_end_minute);
   return new ModalBuilder().setCustomId("water:settings:submit").setTitle("Reminder settings").addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("interval").setLabel("Interval minutes or auto").setPlaceholder("auto or 60").setValue(interval).setStyle(TextInputStyle.Short).setMaxLength(3).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("interval").setLabel("Interval minutes or auto").setPlaceholder("auto or 60").setValue(interval).setStyle(TextInputStyle.Short).setMaxLength(4).setRequired(true)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("quiet_hours").setLabel("Quiet hours (HH:MM-HH:MM)").setPlaceholder("22:00-08:00").setValue(quiet).setStyle(TextInputStyle.Short).setMinLength(11).setMaxLength(11).setRequired(true)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("glass_size").setLabel("Glass size (100-2000 ml)").setPlaceholder("250").setValue(String(user.glass_size_ml)).setStyle(TextInputStyle.Short).setMaxLength(4).setRequired(true)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("style").setLabel("Style: standard, minimal, encouraging").setPlaceholder("standard").setValue(user.reminder_style||"standard").setStyle(TextInputStyle.Short).setMaxLength(12).setRequired(true)),

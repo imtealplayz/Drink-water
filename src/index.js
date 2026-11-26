@@ -666,7 +666,7 @@ async function runScheduler() {
   }
 }
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log("Drink Water is online as " + client.user.tag + ".");
 
   try {
