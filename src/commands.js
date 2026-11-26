@@ -25,7 +25,15 @@ const commandDefinitions = [
   {
     ...common,
     name: "stats",
-    description: "Show your water progress, total glasses, and streaks."
+    description: "Show water progress, total glasses, and streaks.",
+    options: [
+      {
+        type: 6,
+        name: "user",
+        description: "Whose stats to view. Leave empty to view your own.",
+        required: false
+      }
+    ]
   },
   {
     ...common,

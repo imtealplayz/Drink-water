@@ -21,7 +21,7 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 | Command | What it does |
 | --- | --- |
 | /reminder glasses:8 | Start setup for an 8-glass daily goal |
-| /stats | Show today's progress and lifetime stats |
+| /stats [user] | Show your stats, or another user's stats when selected |
 | /leaderboard | Show the top 10 global participants for their current local day, plus your rank. |
 | /drink | Log one glass |
 | /pause | Turn off scheduled reminders |
@@ -66,7 +66,7 @@ Streaks count consecutive local calendar days on which the user's daily goal was
 
 A user-installed app can run its application commands across a user's servers and DMs, but a user installation alone is not a background messaging permission. Scheduled DMs are sent by the bot user, so the bot must also be running and able to DM that person. In practice, add the bot to a server the person shares with it and make sure their DM privacy settings allow messages from server members. If Discord rejects the DM, this bot pauses that user's schedule rather than repeatedly retrying.
 
-The /stats and /drink commands are designed to work as personal app commands. A user's server may still restrict public responses from user-installed apps; Discord can make those responses ephemeral.
+The /stats command supports an optional **user** parameter to view another registered user's hydration stats. Without it, it shows your own stats. The /drink command is designed to work as a personal app command. A user's server may still restrict public responses from user-installed apps; Discord can make those responses ephemeral.
 
 ## Run locally
 

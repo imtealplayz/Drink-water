@@ -193,17 +193,27 @@ async function handleChatInput(interaction) {
     }
 
     case "stats": {
-      const result = getStatsForUser(userId);
+      const selectedUser = interaction.options.getUser("user") || interaction.user;
+      const isSelf = selectedUser.id === interaction.user.id;
+      const result = getStatsForUser(selectedUser.id);
+
       if (!result.user) {
         return replyWithInfo(
           interaction,
-          "No hydration profile yet",
-          "Run /reminder with your daily glass goal to set up your profile."
+          isSelf ? "No hydration profile yet" : "No hydration profile found",
+          isSelf
+            ? "Run /reminder with your daily glass goal to set up your profile."
+            : "<@" + selectedUser.id + "> hasn't set up a hydration profile yet."
         );
       }
 
       return interaction.reply({
-        components: [statsCard(result.user, result.stats, result.user.timezone)],
+        components: [statsCard(
+          result.user,
+          result.stats,
+          result.user.timezone,
+          isSelf ? null : "<@" + selectedUser.id + ">"
+        )],
         flags: MessageFlags.IsComponentsV2
       });
     }

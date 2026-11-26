@@ -143,15 +143,18 @@ function reminderCard(user, stats, now = Date.now()) {
   return container;
 }
 
-function statsCard(user, stats, timeZone) {
+function statsCard(user, stats, timeZone, subject = null) {
   const safeGoal = user ? user.goal : 6;
   const progress = user ? stats.today + " / " + safeGoal + " glasses" : "Not set up yet";
   const bar = user ? progressBar(stats.today, safeGoal) : "Run /reminder to get started.";
+  const heading = subject
+    ? "# 📊 Hydration stats for " + subject
+    : "# 📊 Your hydration stats";
 
   return new ContainerBuilder()
     .setAccentColor(0x6B8FE8)
     .addTextDisplayComponents(
-      text("# 📊 Your hydration stats\n### A little progress adds up.\n\n**Today**\n## " + progress + "\n" + bar)
+      text(heading + "\n### A little progress adds up.\n\n**Today**\n## " + progress + "\n" + bar)
     )
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(
