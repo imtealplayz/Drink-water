@@ -13,6 +13,7 @@ const {
   addDrink,
   deletePendingSetup,
   getDailyTotal,
+  getDailyLeaderboard,
   getDueReminders,
   getPendingSetup,
   getStats,
@@ -34,6 +35,7 @@ const {
 
 const {
   infoCard,
+  leaderboardCard,
   reminderCard,
   reminderErrorMessage,
   reminderOptionsMessage,
@@ -150,6 +152,15 @@ function getStatsForUser(userId) {
   };
 }
 
+function getLeaderboardForUser(userId) {
+  const leaderboard = getDailyLeaderboard(Date.now());
+  return {
+    entries: leaderboard.slice(0, 10),
+    participantCount: leaderboard.length,
+    viewerEntry: leaderboard.find((entry) => entry.userId === String(userId)) || null
+  };
+}
+
 function handleDrink(userId) {
   const user = getUser(userId);
   if (!user) return null;
@@ -193,6 +204,18 @@ async function handleChatInput(interaction) {
 
       return interaction.reply({
         components: [statsCard(result.user, result.stats, result.user.timezone)],
+        flags: MessageFlags.IsComponentsV2
+      });
+    }
+
+    case "leaderboard": {
+      const result = getLeaderboardForUser(userId);
+      return interaction.reply({
+        components: [leaderboardCard(
+          result.entries,
+          result.participantCount,
+          result.viewerEntry
+        )],
         flags: MessageFlags.IsComponentsV2
       });
     }
@@ -401,6 +424,18 @@ async function handlePrefixMessage(message) {
     });
   }
 
+  if (command === "leaderboard") {
+    const result = getLeaderboardForUser(message.author.id);
+    return message.reply({
+      components: [leaderboardCard(
+        result.entries,
+        result.participantCount,
+        result.viewerEntry
+      )],
+      flags: MessageFlags.IsComponentsV2
+    });
+  }
+
   if (command === "drink") {
     const result = handleDrink(message.author.id);
     if (!result) {
@@ -438,7 +473,7 @@ async function handlePrefixMessage(message) {
     return message.reply({
       components: [infoCard(
         "Drink Water commands",
-        "w!reminder 8 — set an 8-glass daily goal\nw!drink — log one glass\nw!stats — see your progress and streaks\nw!pause — turn reminders off\nw!resume — turn reminders back on"
+        "w!reminder 8 — set an 8-glass daily goal\nw!drink — log one glass\nw!stats — see your progress and streaks\nw!leaderboard — see today's global leaderboard\nw!pause — turn reminders off\nw!resume — turn reminders back on"
       )],
       flags: MessageFlags.IsComponentsV2
     });

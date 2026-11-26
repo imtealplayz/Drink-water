@@ -29,6 +29,11 @@ const commandDefinitions = [
   },
   {
     ...common,
+    name: "leaderboard",
+    description: "See today's global hydration leaderboard."
+  },
+  {
+    ...common,
     name: "drink",
     description: "Log one glass of water."
   },

@@ -163,6 +163,42 @@ function statsCard(user, stats, timeZone) {
     );
 }
 
+function leaderboardCard(entries, participantCount, viewerEntry) {
+  const ranking = entries.length
+    ? entries.map((entry) => {
+      const marker = entry.rank === 1
+        ? "🥇"
+        : entry.rank === 2
+          ? "🥈"
+          : entry.rank === 3
+            ? "🥉"
+            : "**" + entry.rank + ".**";
+
+      return marker + " <@" + entry.userId + "> — **" +
+        entry.glasses + "** / " + entry.goal + " glasses";
+    }).join("\n")
+    : "No glasses have been logged today yet. Be the first to claim the top spot.";
+
+  let personalStanding;
+  if (!viewerEntry) {
+    personalStanding = "Your standing: **Not ranked yet** — log your first glass with /drink.";
+  } else {
+    const outsideTopTen = viewerEntry.rank > 10 ? " (outside the top 10)" : "";
+    personalStanding = "Your standing: **#" + viewerEntry.rank + "**" + outsideTopTen +
+      " — " + viewerEntry.glasses + " / " + viewerEntry.goal + " glasses.";
+  }
+
+  return new ContainerBuilder()
+    .setAccentColor(0xE6B84A)
+    .addTextDisplayComponents(
+      text("# 🏆 Today's hydration leaderboard\n### Global daily rankings\n\n" + ranking)
+    )
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(
+      text("**Participants today:** " + participantCount + "\n" + personalStanding)
+    );
+}
+
 function reminderOptionsMessage(goal) {
   return infoCard(
     "Check your DMs",
@@ -180,6 +216,7 @@ function reminderErrorMessage() {
 
 module.exports = {
   infoCard,
+  leaderboardCard,
   reminderCard,
   reminderErrorMessage,
   reminderOptionsMessage,

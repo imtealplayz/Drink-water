@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Database = require("better-sqlite3");
-const { addDaysToDateKey } = require("./time");
+const { addDaysToDateKey, localDateKey } = require("./time");
 
 const databasePath = process.env.DB_PATH || path.join(process.cwd(), "data", "drink-water.sqlite");
 fs.mkdirSync(path.dirname(path.resolve(databasePath)), { recursive: true });
@@ -121,6 +121,28 @@ function getDailyTotal(userId, dateKey) {
   return Number(result.total);
 }
 
+function getDailyLeaderboard(now = Date.now()) {
+  const users = db.prepare(
+    "SELECT user_id, goal, timezone FROM users"
+  ).all();
+  const getTotalForDate = db.prepare(
+    "SELECT COALESCE(SUM(amount), 0) AS total FROM water_logs WHERE user_id = ? AND local_date = ?"
+  );
+
+  return users
+    .map((user) => ({
+      userId: user.user_id,
+      goal: Number(user.goal),
+      glasses: Number(getTotalForDate.get(
+        user.user_id,
+        localDateKey(now, user.timezone)
+      ).total)
+    }))
+    .filter((entry) => entry.glasses > 0)
+    .sort((a, b) => b.glasses - a.glasses || a.userId.localeCompare(b.userId))
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 function getStats(userId, todayDateKey, goal) {
   const rows = db.prepare(
     "SELECT local_date, SUM(amount) AS glasses FROM water_logs " +
@@ -191,6 +213,7 @@ module.exports = {
   db,
   deletePendingSetup,
   getDailyTotal,
+  getDailyLeaderboard,
   getDueReminders,
   getPendingSetup,
   getStats,

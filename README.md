@@ -12,6 +12,7 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 - Reminders are spaced according to the daily goal, with a minimum interval of 45 minutes.
 - Components V2 reminder cards with buttons to log a glass, snooze for 30 minutes, view stats, or pause reminders.
 - Daily progress, current streak, best streak, total glasses, and completed-goal days.
+- A global daily leaderboard ranking the top 10 participants by glasses logged, using each person's local calendar day.
 - SQLite persistence. No Redis, Upstash, MongoDB, or other hosted database is required.
 - Prefix commands for servers where the bot is installed, plus user-installable slash commands.
 
@@ -21,11 +22,13 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 | --- | --- |
 | /reminder glasses:8 | Start setup for an 8-glass daily goal |
 | /stats | Show today's progress and lifetime stats |
+| /leaderboard | Show the top 10 global participants for their current local day, plus your rank. |
 | /drink | Log one glass |
 | /pause | Turn off scheduled reminders |
 | /resume | Turn reminders back on |
 | w!reminder 8 | Prefix version of reminder setup |
 | w!stats | Prefix version of stats |
+| w!leaderboard | See today's global leaderboard |
 | w!drink | Prefix version of logging a glass |
 | w!pause | Pause reminders |
 | w!resume | Resume reminders |
