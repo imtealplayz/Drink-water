@@ -10,7 +10,7 @@ const {
   TextInputBuilder,
   TextInputStyle
 } = require("discord.js");
-const { formatLocalTime } = require("./time");
+const { formatClockMinute, formatLocalTime, getIntervalMinutes } = require("./time");
 
 const ACCENT = 0x27B8AD;
 
@@ -104,20 +104,21 @@ function reminderCard(user, stats, now = Date.now()) {
   const reachedGoal = stats.today >= user.goal;
   const currentTime = formatLocalTime(now, user.timezone);
   const status = user.active ? "Reminders are **on**" : "Reminders are **paused**";
-
-  const headline = reachedGoal
-    ? "Daily goal complete. Nicely done."
-    : "Time for a little water check-in.";
+  const style = user.reminder_style || "standard";
+  const heading = style === "minimal" ? "# Hydration reminder" : style === "encouraging" ? "# Keep your hydration going!" : "# 💧 Hydration check-in";
+  const headline = reachedGoal ? "Daily goal complete. Nicely done." : style === "encouraging" ? "A little water now is a win for the rest of your day." : style === "minimal" ? "Time for a water break." : "Time for a little water check-in.";
+  const volume = Number(stats.todayMl || 0).toLocaleString("en-US");
 
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT)
     .addTextDisplayComponents(
-      text("# 💧 Hydration check-in\n" + headline + "\n\n**Today's progress**\n## " + stats.today + " / " + user.goal + " glasses\n" + progressBar(stats.today, user.goal))
+      text(heading + "\n" + headline + "\n\n**Today's progress**\n## " + stats.today + " / " + user.goal + " glasses\n" + progressBar(stats.today, user.goal) + "\n**Water logged:** " + volume + " ml")
     )
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(
       text("🔥 **Current streak:** " + stats.currentStreak + " day" + (stats.currentStreak === 1 ? "" : "s") +
         "\n🏆 **Best streak:** " + stats.bestStreak + " day" + (stats.bestStreak === 1 ? "" : "s") +
+        "\n🥛 **Glass size:** " + user.glass_size_ml + " ml" +
         "\n🕒 **Your local time:** " + currentTime +
         "\n🌍 **Timezone:** " + user.timezone +
         "\n\n" + status)
@@ -161,11 +162,38 @@ function statsCard(user, stats, timeZone, subject = null) {
       text("🔥 **Current streak:** " + (user ? stats.currentStreak : 0) + " days" +
         "\n🏆 **Best streak:** " + (user ? stats.bestStreak : 0) + " days" +
         "\n💧 **Total glasses logged:** " + (user ? stats.totalGlasses : 0) +
+        "\n🥛 **Water logged today:** " + (user ? Number(stats.todayMl || 0).toLocaleString("en-US") : 0) + " ml" +
+        "\n🌊 **Total water logged:** " + (user ? Number(stats.totalMl || 0).toLocaleString("en-US") : 0) + " ml" +
         "\n✅ **Goal-complete days:** " + (user ? stats.completedDays : 0) +
         (user ? "\n🌍 **Timezone:** " + timeZone : ""))
     );
 }
 
+function settingsModal(user) {
+  const interval=user.interval_minutes===null?"auto":String(user.interval_minutes);
+  const quiet=formatClockMinute(user.quiet_start_minute)+"-"+formatClockMinute(user.quiet_end_minute);
+  return new ModalBuilder().setCustomId("water:settings:submit").setTitle("Reminder settings").addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("interval").setLabel("Interval minutes or auto").setPlaceholder("auto or 60").setValue(interval).setStyle(TextInputStyle.Short).setMaxLength(3).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("quiet_hours").setLabel("Quiet hours (HH:MM-HH:MM)").setPlaceholder("22:00-08:00").setValue(quiet).setStyle(TextInputStyle.Short).setMinLength(11).setMaxLength(11).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("glass_size").setLabel("Glass size (100-2000 ml)").setPlaceholder("250").setValue(String(user.glass_size_ml)).setStyle(TextInputStyle.Short).setMaxLength(4).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("style").setLabel("Style: standard, minimal, encouraging").setPlaceholder("standard").setValue(user.reminder_style||"standard").setStyle(TextInputStyle.Short).setMaxLength(12).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("summary").setLabel("Daily summary time (HH:MM or off)").setPlaceholder("20:00 or off").setValue(user.daily_summary_enabled?user.summary_time:"off").setStyle(TextInputStyle.Short).setMaxLength(5).setRequired(true))
+  );
+}
+function settingsCard(user,notice=null){
+ const interval=user.interval_minutes===null?"Automatic ("+getIntervalMinutes(user.goal)+" min based on your goal)":user.interval_minutes+" minutes";
+ const quiet=formatClockMinute(user.quiet_start_minute)+"–"+formatClockMinute(user.quiet_end_minute);
+ const summary=user.daily_summary_enabled?"On at "+user.summary_time:"Off";
+ return new ContainerBuilder().setAccentColor(0x27B8AD).addTextDisplayComponents(text("# ⚙️ Reminder settings"+(notice?"\n\n"+notice:"")+"\n\n**Reminder interval**\n"+interval+"\n\n**Quiet hours**\n"+quiet+"\n\n**Glass size**\n"+user.glass_size_ml+" ml per logged glass"+"\n\n**Reminder style**\n"+user.reminder_style+"\n\n**Daily summary**\n"+summary+"\n\n**Timezone**\n"+user.timezone))
+ .addSeparatorComponents(separator()).addActionRowComponents(new ActionRowBuilder().addComponents(button("water:settings:edit","Edit settings",ButtonStyle.Primary,"⚙️")));
+}
+function dailySummaryCard(user,stats,now=Date.now()){
+ const complete=stats.today>=user.goal,heading=user.reminder_style==="minimal"?"# Daily hydration summary":"# 💧 Your daily hydration summary";
+ const message=complete?"You reached your daily goal. Well done.":"You logged "+stats.today+" of "+user.goal+" glasses today.";
+ return new ContainerBuilder().setAccentColor(complete?0x27B8AD:0x6B8FE8)
+ .addTextDisplayComponents(text(heading+"\n"+message+"\n\n**Today's water**\n## "+stats.today+" / "+user.goal+" glasses"+"\n**Total volume:** "+Number(stats.todayMl||0).toLocaleString("en-US")+" ml"+"\n**Daily goal:** "+(complete?"Complete":(user.goal-stats.today)+" glass(es) to go")+"\n**Current streak:** "+stats.currentStreak+" days"+"\n**Logged glass size:** "+user.glass_size_ml+" ml"+"\n**Local time:** "+formatLocalTime(now,user.timezone)))
+ .addSeparatorComponents(separator()).addActionRowComponents(new ActionRowBuilder().addComponents(button("water:stats","View full stats",ButtonStyle.Secondary,"📊")));
+}
 function leaderboardCard(entries, participantCount, viewerEntry) {
   const ranking = entries.length
     ? entries.map((entry) => {
@@ -218,11 +246,14 @@ function reminderErrorMessage() {
 }
 
 module.exports = {
+  dailySummaryCard,
   infoCard,
   leaderboardCard,
   reminderCard,
   reminderErrorMessage,
   reminderOptionsMessage,
+  settingsCard,
+  settingsModal,
   setupModal,
   setupPrompt,
   statsCard,

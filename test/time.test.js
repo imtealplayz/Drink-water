@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 const {
   clockMatchesTimeZone,
   getIntervalMinutes,
+  isWithinQuietHours,
   localDateKey,
+  nextDailySummaryTimestamp,
   nextMorningTimestamp,
   nextReminderTimestamp,
   zonedTimeToTimestamp
@@ -47,4 +49,25 @@ test("reminder frequency adapts to the daily goal", () => {
 test("wall-clock conversion handles a daylight-saving transition date", () => {
   const timestamp = zonedTimeToTimestamp("2026-03-08", "08:00", "America/New_York");
   assert.equal(new Date(timestamp).toISOString(), "2026-03-08T12:00:00.000Z");
+});
+
+
+test("custom quiet hours work across midnight",()=>{
+ const now=Date.parse("2026-11-26T13:00:00.000Z");
+ const next=nextReminderTimestamp(now,"Asia/Kolkata",60,19*60,7*60);
+ assert.equal(new Date(next).toISOString(),"2026-11-27T01:30:00.000Z");
+});
+
+test("custom quiet hours work within one day",()=>{
+ const now=Date.parse("2026-11-26T04:00:00.000Z");
+ const next=nextReminderTimestamp(now,"Asia/Kolkata",30,10*60,11*60);
+ assert.equal(new Date(next).toISOString(),"2026-11-26T05:30:00.000Z");
+ assert.equal(isWithinQuietHours(10*60+15,10*60,11*60),true);
+ assert.equal(isWithinQuietHours(11*60,10*60,11*60),false);
+});
+
+test("daily summaries use each user's local timezone",()=>{
+ const now=Date.parse("2026-11-26T10:00:00.000Z");
+ const next=nextDailySummaryTimestamp(now,"Asia/Kolkata","20:00");
+ assert.equal(new Date(next).toISOString(),"2026-11-26T14:30:00.000Z");
 });

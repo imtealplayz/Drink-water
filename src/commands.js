@@ -37,6 +37,11 @@ const commandDefinitions = [
   },
   {
     ...common,
+    name: "settings",
+    description: "Customize your reminder schedule and hydration preferences."
+  },
+  {
+    ...common,
     name: "leaderboard",
     description: "See today's global hydration leaderboard."
   },

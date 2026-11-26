@@ -15,30 +15,39 @@ const {
   getDailyTotal,
   getDailyLeaderboard,
   getDueReminders,
+  getDueSummaries,
   getPendingSetup,
   getStats,
   getUser,
   savePendingSetup,
   saveReminderSetup,
   setNextReminder,
-  setReminderActive
+  setNextSummary,
+  setReminderActive,
+  updateUserSettings
 } = require("./database");
 
 const {
   clockMatchesTimeZone,
   getIntervalMinutes,
   localDateKey,
+  nextDailySummaryTimestamp,
   nextMorningTimestamp,
   nextReminderTimestamp,
+  parseClockInput,
+  isWithinQuietHours,
   isValidTimeZone
 } = require("./time");
 
 const {
+  dailySummaryCard,
   infoCard,
   leaderboardCard,
   reminderCard,
   reminderErrorMessage,
   reminderOptionsMessage,
+  settingsCard,
+  settingsModal,
   setupModal,
   setupPrompt,
   statsCard
@@ -141,6 +150,16 @@ async function beginReminderSetup(user, goal, interaction = null, message = null
   }
 }
 
+function intervalForUser(user) {
+  return user.interval_minutes || getIntervalMinutes(user.goal);
+}
+
+function nextSummaryForUser(user, now = Date.now()) {
+  return user.daily_summary_enabled
+    ? nextDailySummaryTimestamp(now, user.timezone, user.summary_time)
+    : null;
+}
+
 function getStatsForUser(userId) {
   const user = getUser(userId);
   if (!user) return { user: null, stats: null };
@@ -167,12 +186,12 @@ function handleDrink(userId) {
 
   const now = Date.now();
   const today = localDateKey(now, user.timezone);
-  const total = addDrink(userId, today, now);
+  const total = addDrink(userId, today, now, user.glass_size_ml);
 
   if (user.active) {
     const nextAt = total >= user.goal
-      ? nextMorningTimestamp(now, user.timezone)
-      : nextReminderTimestamp(now, user.timezone, getIntervalMinutes(user.goal));
+      ? nextMorningTimestamp(now, user.timezone, user.quiet_end_minute)
+      : nextReminderTimestamp(now, user.timezone, intervalForUser(user), user.quiet_start_minute, user.quiet_end_minute);
     setNextReminder(userId, nextAt);
   }
 
@@ -215,6 +234,17 @@ async function handleChatInput(interaction) {
           isSelf ? null : "<@" + selectedUser.id + ">"
         )],
         flags: MessageFlags.IsComponentsV2
+      });
+    }
+
+    case "settings": {
+      const user = getUser(userId);
+      if (!user) {
+        return replyWithInfo(interaction, "No hydration profile yet", "Run /reminder first. You can customize the schedule after your profile is created.");
+      }
+      return interaction.reply({
+        components: [settingsCard(user)],
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
       });
     }
 
@@ -262,8 +292,9 @@ async function handleChatInput(interaction) {
         return replyWithInfo(interaction, "No reminder schedule found", "Run /reminder to create your hydration schedule.");
       }
 
-      const nextAt = nextReminderTimestamp(Date.now(), user.timezone, getIntervalMinutes(user.goal));
-      setReminderActive(userId, true, nextAt);
+      const now = Date.now();
+      const nextAt = nextReminderTimestamp(now, user.timezone, intervalForUser(user), user.quiet_start_minute, user.quiet_end_minute);
+      setReminderActive(userId, true, nextAt, nextSummaryForUser(user, now));
       return replyWithInfo(interaction, "Reminders are back on", "Your next reminder is scheduled for " + new Date(nextAt).toISOString() + " UTC, adjusted to your local quiet hours.");
     }
 
@@ -319,9 +350,97 @@ async function handleSetupModal(interaction) {
   });
 }
 
+async function handleSettingsModal(interaction) {
+  const userId = interaction.user.id;
+  const user = getUser(userId);
+  if (!user) return interaction.reply({
+    components: [infoCard("Profile not found", "Run /reminder to create your hydration profile.")],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  });
+
+  const intervalRaw = interaction.fields.getTextInputValue("interval").trim().toLowerCase();
+  let intervalMinutes = null;
+  if (intervalRaw !== "auto") {
+    intervalMinutes = Number(intervalRaw);
+    if (!Number.isInteger(intervalMinutes) || intervalMinutes < 15 || intervalMinutes > 360) {
+      return interaction.reply({
+        components: [infoCard("Invalid reminder interval", "Enter **auto** or a whole number from **15 to 360** minutes.", 0xD97757)],
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+      });
+    }
+  }
+
+  const quietMatch = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(interaction.fields.getTextInputValue("quiet_hours").trim());
+  const quietStartMinute = quietMatch ? parseClockInput(quietMatch[1]) : null;
+  const quietEndMinute = quietMatch ? parseClockInput(quietMatch[2]) : null;
+  if (quietStartMinute === null || quietEndMinute === null || quietStartMinute === quietEndMinute) {
+    return interaction.reply({
+      components: [infoCard("Invalid quiet hours", "Use two different 24-hour times, for example **22:00-08:00**.", 0xD97757)],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+  }
+
+  const glassSizeMl = Number(interaction.fields.getTextInputValue("glass_size").trim());
+  if (!Number.isInteger(glassSizeMl) || glassSizeMl < 100 || glassSizeMl > 2000) {
+    return interaction.reply({
+      components: [infoCard("Invalid glass size", "Enter a whole number from **100 to 2000 ml**.", 0xD97757)],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+  }
+
+  const reminderStyle = interaction.fields.getTextInputValue("style").trim().toLowerCase();
+  if (!["standard", "minimal", "encouraging"].includes(reminderStyle)) {
+    return interaction.reply({
+      components: [infoCard("Unknown reminder style", "Choose **standard**, **minimal**, or **encouraging**.", 0xD97757)],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+  }
+
+  const summaryRaw = interaction.fields.getTextInputValue("summary").trim().toLowerCase();
+  const dailySummaryEnabled = summaryRaw !== "off";
+  const summaryMinute = dailySummaryEnabled ? parseClockInput(summaryRaw) : null;
+  if (dailySummaryEnabled && summaryMinute === null) {
+    return interaction.reply({
+      components: [infoCard("Invalid summary time", "Enter a 24-hour time such as **20:00**, or **off** to disable the daily summary.", 0xD97757)],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+  }
+  if (dailySummaryEnabled && isWithinQuietHours(summaryMinute, quietStartMinute, quietEndMinute)) {
+    return interaction.reply({
+      components: [infoCard("Summary falls in quiet hours", "Choose a summary time outside your quiet hours, or set it to **off**.", 0xD97757)],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+  }
+
+  const summaryTime = dailySummaryEnabled ? summaryRaw : user.summary_time;
+  const settings = { intervalMinutes, quietStartMinute, quietEndMinute, glassSizeMl, reminderStyle, dailySummaryEnabled, summaryTime };
+  const now = Date.now();
+  const nextReminderAt = user.active
+    ? nextReminderTimestamp(now, user.timezone, intervalMinutes || getIntervalMinutes(user.goal), quietStartMinute, quietEndMinute)
+    : null;
+  const nextSummaryAt = user.active && dailySummaryEnabled
+    ? nextDailySummaryTimestamp(now, user.timezone, summaryTime)
+    : null;
+
+  updateUserSettings(userId, settings, nextReminderAt, nextSummaryAt);
+  return interaction.reply({
+    components: [settingsCard(getUser(userId), "Preferences saved. Your next reminders will use these settings.")],
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+  });
+}
+
 async function handleButton(interaction) {
   const userId = interaction.user.id;
   const action = interaction.customId;
+
+  if (action === "water:settings:edit") {
+    const user = getUser(userId);
+    if (!user) return interaction.reply({
+      components: [infoCard("Profile not found", "Run /reminder to create your hydration profile.")],
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
+    });
+    return interaction.showModal(settingsModal(user));
+  }
 
   if (action === "water:setup:open") {
     const pending = getPendingSetup(userId);
@@ -373,7 +492,8 @@ async function handleButton(interaction) {
       });
     }
 
-    const nextAt = nextReminderTimestamp(Date.now(), user.timezone, 30);
+    const now = Date.now();
+    const nextAt = nextReminderTimestamp(now, user.timezone, 30, user.quiet_start_minute, user.quiet_end_minute);
     setNextReminder(userId, nextAt);
     return interaction.reply({
       components: [infoCard("Snoozed for 30 minutes", "I'll remind you again after your snooze, while still respecting your local quiet hours.")],
@@ -392,8 +512,9 @@ async function handleButton(interaction) {
   }
 
   if (action === "water:resume") {
-    const nextAt = nextReminderTimestamp(Date.now(), user.timezone, getIntervalMinutes(user.goal));
-    setReminderActive(userId, true, nextAt);
+    const now = Date.now();
+    const nextAt = nextReminderTimestamp(now, user.timezone, intervalForUser(user), user.quiet_start_minute, user.quiet_end_minute);
+    setReminderActive(userId, true, nextAt, nextSummaryForUser(user, now));
     const updated = getUser(userId);
     const stats = userStats(updated);
     return interaction.update({
@@ -504,11 +625,11 @@ async function runScheduler() {
         const total = getDailyTotal(user.user_id, today);
 
         if (total >= user.goal) {
-          setNextReminder(user.user_id, nextMorningTimestamp(now, user.timezone));
+          setNextReminder(user.user_id, nextMorningTimestamp(now, user.timezone, user.quiet_end_minute));
           continue;
         }
 
-        const nextAt = nextReminderTimestamp(now, user.timezone, getIntervalMinutes(user.goal));
+        const nextAt = nextReminderTimestamp(now, user.timezone, intervalForUser(user), user.quiet_start_minute, user.quiet_end_minute);
         setNextReminder(user.user_id, nextAt);
 
         const discordUser = await client.users.fetch(user.user_id);
@@ -522,6 +643,22 @@ async function runScheduler() {
       } catch (error) {
         console.error("Reminder delivery failed for user " + user.user_id + ":", error.message);
         setReminderActive(user.user_id, false, null);
+      }
+    }
+    const dueSummaries = getDueSummaries(now, 30);
+    for (const user of dueSummaries) {
+      setNextSummary(user.user_id, nextDailySummaryTimestamp(now, user.timezone, user.summary_time));
+      try {
+        const today = localDateKey(now, user.timezone);
+        const stats = getStats(user.user_id, today, user.goal);
+        const discordUser = await client.users.fetch(user.user_id);
+        const dm = await discordUser.createDM();
+        await dm.send({
+          components: [dailySummaryCard(user, stats, now)],
+          flags: MessageFlags.IsComponentsV2
+        });
+      } catch (error) {
+        console.error("Daily summary delivery failed for user " + user.user_id + ":", error.message);
       }
     }
   } finally {
@@ -555,6 +692,11 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.isModalSubmit() && interaction.customId === "water:timezone:submit") {
       await handleSetupModal(interaction);
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === "water:settings:submit") {
+      await handleSettingsModal(interaction);
       return;
     }
 

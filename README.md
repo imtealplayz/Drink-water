@@ -13,6 +13,8 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 - Components V2 reminder cards with buttons to log a glass, snooze for 30 minutes, view stats, or pause reminders.
 - Daily progress, current streak, best streak, total glasses, and completed-goal days.
 - A global daily leaderboard ranking the top 10 participants by glasses logged, using each person's local calendar day.
+- Custom reminder intervals, quiet hours, glass sizes, and reminder styles through /settings.
+- Automatic daily hydration summaries with a configurable local delivery time.
 - SQLite persistence. No Redis, Upstash, MongoDB, or other hosted database is required.
 - Prefix commands for servers where the bot is installed, plus user-installable slash commands.
 
@@ -22,6 +24,7 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 | --- | --- |
 | /reminder glasses:8 | Start setup for an 8-glass daily goal |
 | /stats [user] | Show your stats, or another user's stats when selected |
+| /settings | Customize reminder interval, quiet hours, glass size, reminder style, and daily summary |
 | /leaderboard | Show the top 10 global participants for their current local day, plus your rank. |
 | /drink | Log one glass |
 | /pause | Turn off scheduled reminders |
@@ -35,6 +38,18 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 | w!help | Show prefix help |
 
 The reminder command accepts a whole number from 6 to 24.
+
+### Reminder preferences
+
+Use **/settings** after creating your hydration profile, then press **Edit settings**. You can enter:
+
+- Reminder interval: **auto** to match your goal, or a custom interval from 15 to 360 minutes.
+- Quiet hours: a start and end time in 24-hour format, such as **22:00-08:00**. Overnight ranges are supported.
+- Glass size: 100–2000 ml. Each logged glass records its volume, so older logs keep their original size.
+- Reminder style: **standard**, **minimal**, or **encouraging**.
+- Daily summary: a local **HH:MM** time or **off**. Summaries run only while reminders are enabled and must be outside quiet hours.
+
+Existing profiles are migrated with their existing reminder schedules preserved, a 250 ml glass size, standard reminder style, 22:00–08:00 quiet hours, and a daily summary at 20:00.
 
 ## How reminders work
 
