@@ -11,6 +11,7 @@ const {
   TextInputStyle
 } = require("discord.js");
 const { formatClockMinute, formatLocalTime, getIntervalMinutes } = require("./time");
+const { getLevelProgress } = require("./xp");
 
 const ACCENT = 0x27B8AD;
 
@@ -108,6 +109,7 @@ function reminderCard(user, stats, now = Date.now()) {
   const heading = style === "minimal" ? "# Hydration reminder" : style === "encouraging" ? "# Keep your hydration going!" : "# 💧 Hydration check-in";
   const headline = reachedGoal ? "Daily goal complete. Nicely done." : style === "encouraging" ? "A little water now is a win for the rest of your day." : style === "minimal" ? "Time for a water break." : "Time for a little water check-in.";
   const volume = Number(stats.todayMl || 0).toLocaleString("en-US");
+  const xp = getLevelProgress(user.xp || 0);
 
   const container = new ContainerBuilder()
     .setAccentColor(ACCENT)
@@ -119,6 +121,7 @@ function reminderCard(user, stats, now = Date.now()) {
       text("🔥 **Current streak:** " + stats.currentStreak + " day" + (stats.currentStreak === 1 ? "" : "s") +
         "\n🏆 **Best streak:** " + stats.bestStreak + " day" + (stats.bestStreak === 1 ? "" : "s") +
         "\n🥛 **Glass size:** " + user.glass_size_ml + " ml" +
+        "\n💠 **Hydration level:** " + xp.level + " · " + xp.totalXp.toLocaleString("en-US") + " XP" +
         "\n🕒 **Your local time:** " + currentTime +
         "\n🌍 **Timezone:** " + user.timezone +
         "\n\n" + status)
@@ -144,13 +147,18 @@ function reminderCard(user, stats, now = Date.now()) {
   return container;
 }
 
-function statsCard(user, stats, timeZone, subject = null) {
+function statsCard(user, stats, timeZone, subject = null, drinkResult = null) {
   const safeGoal = user ? user.goal : 6;
   const progress = user ? stats.today + " / " + safeGoal + " glasses" : "Not set up yet";
   const bar = user ? progressBar(stats.today, safeGoal) : "Run /reminder to get started.";
   const heading = subject
     ? "# 📊 Hydration stats for " + subject
     : "# 📊 Your hydration stats";
+  const xp = user ? getLevelProgress(user.xp || 0) : getLevelProgress(0);
+  const drinkXpMessage = drinkResult
+    ? "\\n✨ **XP earned from this drink:** +" + drinkResult.xpEarned +
+      (drinkResult.goalBonusXp ? " (includes +" + drinkResult.goalBonusXp + " daily-goal bonus)" : "")
+    : "";
 
   return new ContainerBuilder()
     .setAccentColor(0x6B8FE8)
@@ -165,7 +173,11 @@ function statsCard(user, stats, timeZone, subject = null) {
         "\n🥛 **Water logged today:** " + (user ? Number(stats.todayMl || 0).toLocaleString("en-US") : 0) + " ml" +
         "\n🌊 **Total water logged:** " + (user ? Number(stats.totalMl || 0).toLocaleString("en-US") : 0) + " ml" +
         "\n✅ **Goal-complete days:** " + (user ? stats.completedDays : 0) +
-        (user ? "\n🌍 **Timezone:** " + timeZone : ""))
+        (user ? "\n💠 **Hydration level:** " + xp.level +
+          "\n✨ **Total XP:** " + xp.totalXp.toLocaleString("en-US") +
+          "\n**Next level:** " + xp.currentXp + " / " + xp.xpForNextLevel + " XP" +
+          "\n" + progressBar(xp.currentXp, xp.xpForNextLevel) + drinkXpMessage +
+          "\n🌍 **Timezone:** " + timeZone : ""))
     );
 }
 

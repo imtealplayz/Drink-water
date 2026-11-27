@@ -48,7 +48,17 @@ const commandDefinitions = [
   {
     ...common,
     name: "drink",
-    description: "Log one glass of water."
+    description: "Log water in millilitres; omit the amount to use your glass size.",
+    options: [
+      {
+        type: 4,
+        name: "amount",
+        description: "Water amount in ml (1–5000). Omit to use your configured glass size.",
+        required: false,
+        min_value: 1,
+        max_value: 5000
+      }
+    ]
   },
   {
     ...common,

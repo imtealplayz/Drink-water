@@ -180,26 +180,23 @@ function getLeaderboardForUser(userId) {
   };
 }
 
-function handleDrink(userId) {
+function handleDrink(userId, amountMl = null) {
   const user = getUser(userId);
   if (!user) return null;
-
+  const volume = amountMl === null ? Number(user.glass_size_ml) : Number(amountMl);
+  if (!Number.isInteger(volume) || volume < 1 || volume > 5000) return { invalidAmount: true, user };
   const now = Date.now();
   const today = localDateKey(now, user.timezone);
-  const total = addDrink(userId, today, now, user.glass_size_ml);
-
+  const logged = addDrink(userId, today, now, volume, user.goal);
   if (user.active) {
-    const nextAt = total >= user.goal
+    const nextAt = logged.total >= user.goal
       ? nextMorningTimestamp(now, user.timezone, user.quiet_end_minute)
       : nextReminderTimestamp(now, user.timezone, intervalForUser(user), user.quiet_start_minute, user.quiet_end_minute);
     setNextReminder(userId, nextAt);
   }
-
   const updatedUser = getUser(userId);
-  return {
-    user: updatedUser,
-    stats: userStats(updatedUser, now)
-  };
+  return { user: updatedUser, stats: userStats(updatedUser, now), amountMl: volume,
+    xpEarned: logged.xpEarned, volumeXp: logged.volumeXp, goalBonusXp: logged.goalBonusXp };
 }
 
 async function handleChatInput(interaction) {
@@ -261,7 +258,8 @@ async function handleChatInput(interaction) {
     }
 
     case "drink": {
-      const result = handleDrink(userId);
+      const amountMl = interaction.options.getInteger("amount");
+      const result = handleDrink(userId, amountMl);
       if (!result) {
         return replyWithInfo(
           interaction,
@@ -269,9 +267,10 @@ async function handleChatInput(interaction) {
           "Run /reminder with a daily glass goal before logging water."
         );
       }
+      if (result.invalidAmount) return replyWithInfo(interaction, "Invalid drink amount", "Enter a whole number from **1 to 5000 ml**. Leave the amount blank to log your configured glass size (" + result.user.glass_size_ml + " ml).");
 
       return interaction.reply({
-        components: [statsCard(result.user, result.stats, result.user.timezone)],
+        components: [statsCard(result.user, result.stats, result.user.timezone, null, result)],
         flags: MessageFlags.IsComponentsV2
       });
     }
@@ -568,15 +567,24 @@ async function handlePrefixMessage(message) {
   }
 
   if (command === "drink") {
-    const result = handleDrink(message.author.id);
+    const rawAmount = parts[0];
+    const amountMl = rawAmount === undefined ? null : (/^\\d+$/.test(rawAmount) ? Number(rawAmount) : NaN);
+    if (parts.length > 1 || (amountMl !== null && (!Number.isInteger(amountMl) || amountMl < 1 || amountMl > 5000))) {
+      return message.reply({
+        components: [infoCard("Invalid drink amount", "Use **w!drink** or **w!drink 500**. Amount must be a whole number from **1 to 5000 ml**. Without an amount, your configured glass size is used.")],
+        flags: MessageFlags.IsComponentsV2
+      });
+    }
+    const result = handleDrink(message.author.id, amountMl);
     if (!result) {
       return message.reply({
         components: [infoCard("Set up first", "Use w!reminder 8 before logging water.")],
         flags: MessageFlags.IsComponentsV2
       });
     }
+    if (result.invalidAmount) return message.reply("Enter a whole number from 1 to 5000 ml. Your configured glass size is " + result.user.glass_size_ml + " ml.");
     return message.reply({
-      components: [statsCard(result.user, result.stats, result.user.timezone)],
+      components: [statsCard(result.user, result.stats, result.user.timezone, null, result)],
       flags: MessageFlags.IsComponentsV2
     });
   }
@@ -604,7 +612,7 @@ async function handlePrefixMessage(message) {
     return message.reply({
       components: [infoCard(
         "Drink Water commands",
-        "w!reminder 8 — set an 8-glass daily goal\nw!drink — log one glass\nw!stats — see your progress and streaks\nw!leaderboard — see today's global leaderboard\nw!pause — turn reminders off\nw!resume — turn reminders back on"
+        "w!reminder 8 — set an 8-glass daily goal\nw!drink [ml] — log water; omit ml to use your glass size\nw!stats — see your progress, streaks, and hydration XP\nw!leaderboard — see today's global leaderboard\nw!pause — turn reminders off\nw!resume — turn reminders back on"
       )],
       flags: MessageFlags.IsComponentsV2
     });

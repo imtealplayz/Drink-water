@@ -13,6 +13,9 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 - Components V2 reminder cards with buttons to log a glass, snooze for 30 minutes, view stats, or pause reminders.
 - Daily progress, current streak, best streak, total glasses, and completed-goal days.
 - A global daily leaderboard ranking the top 10 participants by glasses logged, using each person's local calendar day.
+- Hydration XP: 1 XP per 100 ml logged, plus a one-time 25 XP bonus when the daily glass goal is reached.
+- Gradually increasing hydration levels shown in stats and reminder cards.
+- Custom drink amounts through /drink amount or w!drink amount; omitting the amount uses the user's configured glass size.
 - Custom reminder intervals, quiet hours, glass sizes, and reminder styles through /settings.
 - Automatic daily hydration summaries with a configurable local delivery time.
 - SQLite persistence. No Redis, Upstash, MongoDB, or other hosted database is required.
@@ -26,18 +29,25 @@ A personal hydration reminder bot for Discord. It uses Discord Components V2, su
 | /stats [user] | Show your stats, or another user's stats when selected |
 | /settings | Customize reminder interval, quiet hours, glass size, reminder style, and daily summary |
 | /leaderboard | Show the top 10 global participants for their current local day, plus your rank. |
-| /drink | Log one glass |
+| /drink [amount] | Log water in ml; omitted amount uses your configured glass size |
 | /pause | Turn off scheduled reminders |
 | /resume | Turn reminders back on |
 | w!reminder 8 | Prefix version of reminder setup |
 | w!stats | Prefix version of stats |
 | w!leaderboard | See today's global leaderboard |
-| w!drink | Prefix version of logging a glass |
+| w!drink [amount] | Log water in ml; omitted amount uses your configured glass size (for example, w!drink 500) |
 | w!pause | Pause reminders |
 | w!resume | Resume reminders |
 | w!help | Show prefix help |
 
-The reminder command accepts a whole number from 6 to 24.
+The reminder command accepts a whole number from 6 to 24. The /drink amount option and w!drink amount prefix accept whole-number millilitre amounts from 1 to 5000. When omitted, the amount defaults to the user's current glass size from /settings.
+
+### Hydration XP
+
+- Every 100 ml logged earns 1 XP. Partial amounts accumulate across drinks, so splitting an amount does not create extra XP.
+- Reaching your daily glass-count goal awards an additional 25 XP once per local calendar day.
+- Level 1 starts at 0 XP. The first level requires 100 XP, and each following level requires 50 more XP than the previous one.
+- XP is shown in /stats and reminder cards. Existing users receive XP based on their recorded water volume, plus historical daily-goal bonuses, during the additive database migration.
 
 ### Reminder preferences
 

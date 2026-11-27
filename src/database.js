@@ -1,5 +1,6 @@
 const fs=require("node:fs"),path=require("node:path"),Database=require("better-sqlite3");
 const {addDaysToDateKey,localDateKey,nextDailySummaryTimestamp}=require("./time");
+const {calculateVolumeXp}=require("./xp");
 const databasePath=process.env.DB_PATH||path.join(process.cwd(),"data","drink-water.sqlite");
 fs.mkdirSync(path.dirname(path.resolve(databasePath)),{recursive:true});
 const db=new Database(databasePath);
@@ -11,6 +12,7 @@ db.exec(
  "CREATE TABLE IF NOT EXISTS pending_setups (user_id TEXT PRIMARY KEY,goal INTEGER NOT NULL CHECK(goal>=6 AND goal<=24),expires_at INTEGER NOT NULL);"
 );
 function addColumnIfMissing(table,column,definition){const cols=db.pragma("table_info("+table+")");if(!cols.some(c=>c.name===column))db.exec("ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition);}
+const xpColumnExisted=db.pragma("table_info(users)").some(c=>c.name==="xp");
 // Additive migrations preserve existing users and logs.
 addColumnIfMissing("users","interval_minutes","INTEGER");
 addColumnIfMissing("users","quiet_start_minute","INTEGER NOT NULL DEFAULT 1320");
@@ -21,6 +23,15 @@ addColumnIfMissing("users","daily_summary_enabled","INTEGER NOT NULL DEFAULT 1")
 addColumnIfMissing("users","summary_time","TEXT NOT NULL DEFAULT '20:00'");
 addColumnIfMissing("users","next_summary_at","INTEGER");
 addColumnIfMissing("water_logs","volume_ml","INTEGER NOT NULL DEFAULT 250");
+addColumnIfMissing("users","xp","INTEGER NOT NULL DEFAULT 0");
+db.exec("CREATE TABLE IF NOT EXISTS hydration_goal_rewards (user_id TEXT NOT NULL,local_date TEXT NOT NULL,xp_awarded INTEGER NOT NULL DEFAULT 25,PRIMARY KEY(user_id,local_date),FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE);");
+if(!xpColumnExisted){
+ const oldUsers=db.prepare("SELECT user_id,goal FROM users").all();
+ const oldDays=db.prepare("SELECT local_date,SUM(amount) AS glasses,SUM(volume_ml) AS volume_ml FROM water_logs WHERE user_id=? GROUP BY local_date");
+ const saveXp=db.prepare("UPDATE users SET xp=? WHERE user_id=?");
+ const saveReward=db.prepare("INSERT OR IGNORE INTO hydration_goal_rewards(user_id,local_date,xp_awarded) VALUES(?,?,25)");
+ for(const u of oldUsers){let volume=0,bonus=0;for(const day of oldDays.all(u.user_id)){volume+=Number(day.volume_ml);if(Number(day.glasses)>=Number(u.goal)){bonus+=25;saveReward.run(u.user_id,day.local_date);}}saveXp.run(Math.floor(volume/100)+bonus,u.user_id);}
+}
 const oldProfiles=db.prepare("SELECT user_id,timezone,summary_time FROM users WHERE active=1 AND daily_summary_enabled=1 AND next_summary_at IS NULL").all();
 const setMigrated=db.prepare("UPDATE users SET next_summary_at=? WHERE user_id=? AND next_summary_at IS NULL");
 for(const u of oldProfiles)setMigrated.run(nextDailySummaryTimestamp(Date.now(),u.timezone,u.summary_time),u.user_id);
@@ -44,10 +55,27 @@ function updateUserSettings(userId,s,nextReminderAt,nextSummaryAt){
 }
 function getDueReminders(now=Date.now(),limit=30){return db.prepare("SELECT * FROM users WHERE active=1 AND next_reminder_at IS NOT NULL AND next_reminder_at<=? ORDER BY next_reminder_at LIMIT ?").all(Number(now),Number(limit));}
 function getDueSummaries(now=Date.now(),limit=30){return db.prepare("SELECT * FROM users WHERE active=1 AND daily_summary_enabled=1 AND next_summary_at IS NOT NULL AND next_summary_at<=? ORDER BY next_summary_at LIMIT ?").all(Number(now),Number(limit));}
-function addDrink(userId,dateKey,createdAt=Date.now(),volumeMl=250){
+function addDrink(userId,dateKey,createdAt=Date.now(),volumeMl=250,goal=6){
+ const id=String(userId),date=String(dateKey),volume=Number(volumeMl),dailyGoal=Number(goal);
+ if(!Number.isInteger(volume)||volume<1||volume>5000)throw new RangeError("Drink amount must be a whole number from 1 to 5000 ml.");
  const insert=db.prepare("INSERT INTO water_logs(user_id,local_date,amount,volume_ml,created_at) VALUES(?,?,1,?,?)");
- const tx=db.transaction(()=>{insert.run(String(userId),String(dateKey),Number(volumeMl),Number(createdAt));return db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM water_logs WHERE user_id=? AND local_date=?").get(String(userId),String(dateKey)).total;});
- return Number(tx());
+ const totalMlQuery=db.prepare("SELECT COALESCE(SUM(volume_ml),0) AS total FROM water_logs WHERE user_id=?");
+ const dailyTotalQuery=db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM water_logs WHERE user_id=? AND local_date=?");
+ const rewardInsert=db.prepare("INSERT OR IGNORE INTO hydration_goal_rewards(user_id,local_date,xp_awarded) VALUES(?,?,25)");
+ const updateXp=db.prepare("UPDATE users SET xp=xp+? WHERE user_id=?");
+ const getXp=db.prepare("SELECT xp FROM users WHERE user_id=?");
+ const tx=db.transaction(()=>{
+  const previousMl=Number(totalMlQuery.get(id).total);
+  insert.run(id,date,volume,Number(createdAt));
+  const total=Number(dailyTotalQuery.get(id,date).total);
+  const volumeXp=calculateVolumeXp(previousMl,volume);
+  let goalBonusXp=0;
+  if(total>=dailyGoal){const reward=rewardInsert.run(id,date);if(reward.changes)goalBonusXp=25;}
+  const xpEarned=volumeXp+goalBonusXp;
+  if(xpEarned>0)updateXp.run(xpEarned,id);
+  return {total,totalMl:previousMl+volume,volumeXp,goalBonusXp,xpEarned,totalXp:Number(getXp.get(id).xp)};
+ });
+ return tx();
 }
 function getDailyTotal(userId,dateKey){return Number(db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM water_logs WHERE user_id=? AND local_date=?").get(String(userId),String(dateKey)).total);}
 function getDailyLeaderboard(now=Date.now()){
